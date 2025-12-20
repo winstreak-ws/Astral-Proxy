@@ -137,3 +137,19 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+dist/
+node_modules/
+.idea/
+.env
+pnpm-lock.yaml
+profiles/
+srcOLD/
+.vs/
+src/config/config.json
+src/discord/user.json
+src/site/minecraft-user.json
+/data
+src/commands/_manifest.ts
+src/mods/_manifest.ts
+certs/
