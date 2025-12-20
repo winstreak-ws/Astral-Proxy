@@ -42,7 +42,7 @@ class Client {
     static API_KEY: string | null = null;
     private nextRequestId = 1;
     private pending: Map<number, (res: astralProtocol.ApiResponse) => void> = new Map();
-    private userAstralPending: Map<string, { resolves: Array<(v: boolean) => void>; rejects: Array<(err: any) => void>; timer: NodeJS.Timeout }> = new Map();
+    private userAstralPending: Map<string, { resolves: Array<(v: boolean | string) => void>; rejects: Array<(err: any) => void>; timer: NodeJS.Timeout }> = new Map();
     private inflight: Map<string, Promise<astralProtocol.ApiResponse>> = new Map();
     private ircListener: ((sender: string, message: string, userId: string) => void) | null = null;
     private ircEventListener: ((type: "join" | "leave", name: string, userId: string) => void) | null = null;
@@ -292,7 +292,14 @@ class Client {
                         if (pending) {
                             try { clearTimeout(pending.timer); } catch { }
                             for (const res of pending.resolves) {
-                                try { res(result.isOnAstral); } catch { }
+                                try {
+                                    // Prefer prefix if present; otherwise fall back to boolean
+                                    if (typeof result.prefix === 'string' && result.prefix.length > 0) {
+                                        res(result.prefix);
+                                    } else {
+                                        res(!!result.isOnAstral);
+                                    }
+                                } catch { }
                             }
                             this.userAstralPending.delete(result.uuid);
                         }
@@ -585,7 +592,7 @@ class Client {
         this.client!.send(frame);
     }
 
-    async requestIsUserOnAstral(uuid: string): Promise<boolean> {
+    async requestIsUserOnAstral(uuid: string): Promise<boolean | string> {
 
         uuid = uuid.replace(/-/g, '').toLowerCase();
 
@@ -593,15 +600,15 @@ class Client {
         const frame = astralProtocol.encodeRequestAstralUser(uuid);
         if (LOG_RAW_WEBSOCKET) logger.info(`[WS SEND] ${Buffer.from(frame).toString('hex')}`);
 
-    const existing = this.userAstralPending.get(uuid);
+        const existing = this.userAstralPending.get(uuid);
         if (existing) {
-            return new Promise<boolean>((resolve, reject) => {
+            return new Promise<boolean | string>((resolve, reject) => {
                 existing.resolves.push(resolve);
                 existing.rejects.push(reject);
             });
         }
 
-        return new Promise<boolean>((resolve, reject) => {
+        return new Promise<boolean | string>((resolve, reject) => {
             const timer = setTimeout(() => {
                 const pending = this.userAstralPending.get(uuid);
                 if (!pending) return;

@@ -648,7 +648,7 @@ export default {
 		}
 		const cachedResponses: Map<string, string> = new Map();
 		let gameType: 'game' | 'queue' | 'lobby' | null = null;
-		let AstralPrefixCache: Map<string, { isOnAstral: boolean, expires: number }> = new Map();
+		let AstralPrefixCache: Map<string, { prefix: string | null, expires: number }> = new Map();
 		const taskQueue: QueuedTask[] = [];
 		let isProcessingQueue = false;
 		const queueTask = (task: () => Promise<void>, priority: number = 0) => {
@@ -1909,6 +1909,23 @@ export default {
 
 			const isSelf = String(uuid_).toLowerCase() === String(ownUuid).toLowerCase();
 			if (isSelf) {
+				// If cached prefix exists and valid, apply it; otherwise request and return star immediately
+				const now = Date.now();
+				const cached = AstralPrefixCache.get(uuid_);
+				if (cached && cached.expires > now && cached.prefix) {
+					return text.startsWith(cached.prefix) ? text : `${cached.prefix}${text}`;
+				}
+				try {
+					void wsClient.requestIsUserOnAstral(uuid_).then(res => {
+						let prefixToApply: string | null = null;
+						if (typeof res === 'string' && res.trim().length > 0) {
+							prefixToApply = res;
+						} else if (res === true) {
+							prefixToApply = '§d✦ ';
+						}
+						AstralPrefixCache.set(uuid_, { prefix: prefixToApply, expires: Date.now() + 30 * 60 * 1000 });
+					}).catch(() => { /* ignore */ });
+				} catch { /* ignore */ }
 				return text.startsWith('§d✦ ') || text.startsWith('✦ ') ? text : `§d✦ ${text}`;
 			}
 
@@ -1920,16 +1937,23 @@ export default {
 				const now = Date.now();
 
 				if (cached && cached.expires > now) {
-					if (cached.isOnAstral) {
-						return text.startsWith('§d✦ ') || text.startsWith('✦ ') ? text : `§d✦ ${text}`;
+					if (cached.prefix && cached.prefix.length > 0) {
+						return text.startsWith(cached.prefix) ? text : `${cached.prefix}${text}`;
 					}
 					return text;
 				}
 
-				const isOnAstral = await wsClient.requestIsUserOnAstral(uuid_);
-				AstralPrefixCache.set(uuid_, { isOnAstral, expires: now + 30 * 60 * 1000 });
-				if (isOnAstral) {
-					return text.startsWith('§d✦ ') || text.startsWith('✦ ') ? text : `§d✦ ${text}`;
+				const res = await wsClient.requestIsUserOnAstral(uuid_);
+				let prefixToApply: string | null = null;
+				if (typeof res === 'string' && res.trim().length > 0) {
+					prefixToApply = res;
+				} else if (res === true) {
+					// Backward compatibility: boolean response -> default prefix
+					prefixToApply = '§d✦ ';
+				}
+				AstralPrefixCache.set(uuid_, { prefix: prefixToApply, expires: now + 30 * 60 * 1000 });
+				if (prefixToApply) {
+					return text.startsWith(prefixToApply) ? text : `${prefixToApply}${text}`;
 				}
 			}
 			return text;

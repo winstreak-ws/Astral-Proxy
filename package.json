@@ -27,7 +27,7 @@
 	"author": "",
 	"license": "ISC",
 	"dependencies": {
-		"@winstreak-ws/hypixel-plugin-message": "^0.3.3",
+		"@winstreak-ws/hypixel-plugin-message": "^0.3.4",
 		"axios": "^1.10.0",
 		"buffer-equal": "^1.0.1",
 		"chalk": "^4.1.2",

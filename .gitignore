@@ -153,3 +153,4 @@ src/site/minecraft-user.json
 src/commands/_manifest.ts
 src/mods/_manifest.ts
 certs/
+package-lock.json
