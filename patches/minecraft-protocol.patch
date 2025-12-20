@@ -1,0 +1,58 @@
+diff --git a/src/server/login.js b/src/server/login.js
+index 858b952ca96eaa0223ea9854ed8b9211d92a951e..46a7ffb4338a66a1f5ec526368bbc2f8028b3995 100644
+--- a/src/server/login.js
++++ b/src/server/login.js
+@@ -7,6 +7,7 @@ const chatPlugin = require('./chat')
+ const { concat } = require('../transforms/binaryStream')
+ const { mojangPublicKeyPem } = require('./constants')
+ const debug = require('debug')('minecraft-protocol')
++const NodeRSA = require("node-rsa")
+ 
+ /**
+  * @param {import('../index').Client} client
+@@ -122,10 +123,18 @@ module.exports = function (client, server, options) {
+     } else {
+       const encryptedToken = packet.hasVerifyToken ? packet.crypto.verifyToken : packet.verifyToken
+       try {
+-        const decryptedToken = crypto.privateDecrypt({
+-          key: server.serverKey.exportKey(),
+-          padding: crypto.constants.RSA_PKCS1_PADDING
+-        }, encryptedToken)
++        const keyRSA = new NodeRSA(
++          server.serverKey.exportKey(),
++          "private",
++          {
++            encryptionScheme: {
++              scheme: 'pkcs1',
++            },
++            environment: 'browser'
++          }
++        );
++
++        const decryptedToken = keyRSA.decrypt(encryptedToken);
+ 
+         if (!client.verifyToken.equals(decryptedToken)) {
+           client.end('DidNotEncryptVerifyTokenProperly')
+@@ -139,10 +148,18 @@ module.exports = function (client, server, options) {
+ 
+     let sharedSecret
+     try {
+-      sharedSecret = crypto.privateDecrypt({
+-        key: server.serverKey.exportKey(),
+-        padding: crypto.constants.RSA_PKCS1_PADDING
+-      }, packet.sharedSecret)
++      const keyRSA = new NodeRSA(
++        server.serverKey.exportKey(),
++        "private",
++        {
++          encryptionScheme: {
++            scheme: 'pkcs1',
++          },
++          environment: 'browser'
++        }
++      );
++
++      sharedSecret = keyRSA.decrypt(packet.sharedSecret);
+     } catch (e) {
+       client.end('DidNotEncryptVerifyTokenProperly')
+       return

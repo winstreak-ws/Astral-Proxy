@@ -1,0 +1,71 @@
+{
+	"name": "proxy",
+	"version": "0.2.2",
+	"description": "",
+	"main": "./dist/index.js",
+	"type": "module",
+	"scripts": {
+		"build": "tsc --diagnostics --noEmitOnError false",
+		"prebuild:bundle": "node scripts/generate-manifest.mjs",
+		"make:icns": "node scripts/make-icns.js",
+		"build:bundle": "node esbuild.config.cjs",
+		"build:win": "npm run build:bundle && pkg dist/bundle.cjs --targets node18-win-x64 --output dist/win-x64/Astral.exe --compress Brotli && node scripts/postbuild.js win && mv dist/win-x64/Astral-signed.exe dist/win-x64/Astral-win-x64.exe",
+		"build:linux": "npm run build:bundle && pkg dist/bundle.cjs --targets node18-linux-x64 --output dist/linux-x64/astral --compress Brotli && node scripts/postbuild.js linux && cp scripts/install.sh dist/linux-x64/install.sh && tar -czvf dist/linux-x64/Astral-linux-x64.tar.gz -C dist/linux-x64 astral Astral.desktop astral.png install.sh",
+		"build:mac": "npm run build:bundle && pkg dist/bundle.cjs --targets node18-macos-x64 --output dist/mac-x64/Astral.app/Contents/MacOS/astral && cp scripts/mac-launcher.sh dist/mac-x64/Astral.app/Contents/MacOS/launcher && chmod +x dist/mac-x64/Astral.app/Contents/MacOS/Astral && node scripts/postbuild.js mac && create-dmg --volname 'Astral Proxy' --volicon 'assets/icon.icns' --window-size 500 300 --icon-size 100 --icon 'Astral.app' 100 150 --app-drop-link 400 150 dist/mac-x64/Astral-mac-x64.dmg dist/mac-x64/",
+		"build:all": "npm run build:win && npm run build:linux && npm run build:mac",
+		"build:exe": "npm run build:bundle && pkg dist/bundle.cjs --targets node18-win-x64 --output dist/Astral.exe",
+		"sign:exe": "node scripts/postbuild.js",
+		"build:exe:signed": "npm run build:exe && npm run sign:exe",
+		"pretty": "prettier --write .",
+		"dev": "npm run prebuild:bundle && tsx src/index.ts --no-clear",
+		"dev:no-assets": "npm run prebuild:bundle && tsx src/index.ts --no-assets --no-clear",
+		"format": "prettier --write . && eslint --fix --format=pretty src",
+		"lint": "prettier --check . && eslint --format=pretty src",
+		"start": "node ./dist/index.js"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"@winstreak-ws/hypixel-plugin-message": "^0.3.3",
+		"axios": "^1.10.0",
+		"buffer-equal": "^1.0.1",
+		"chalk": "^4.1.2",
+		"chokidar": "^4.0.3",
+		"discord-rpc": "^4.0.1",
+		"express": "^5.1.0",
+		"minecraft-data": "3.84.1",
+		"minecraft-packets": "^1.8.0",
+		"minecraft-protocol": "1.54.0",
+		"pnpm": "^10.14.0",
+		"prismarine-chat": "^1.10.1",
+		"prismarine-entity": "^2.4.0",
+		"prismarine-item": "^1.15.0",
+		"prismarine-registry": "^1.10.0",
+		"tab-stats": "file:",
+		"typed-emitter": "^2.1.0",
+		"uuid": "^13.0.0",
+		"ws": "^8.18.3"
+	},
+	"devDependencies": {
+		"@eslint/eslintrc": "^3.2.0",
+		"@eslint/js": "^9.17.0",
+		"@types/buffer-equal": "^1.0.2",
+		"@types/chokidar": "^1.7.5",
+		"@types/ws": "^8.18.1",
+		"@yao-pkg/pkg": "^6.6.0",
+		"esbuild": "^0.25.9",
+		"eslint": "^9.17.0",
+		"eslint-config-neon": "^0.2.4",
+		"eslint-formatter-pretty": "^6.0.1",
+		"prettier": "^3.4.2",
+		"resedit": "^2.0.3",
+		"tsx": "^4.19.2",
+		"typescript": "^5.7.2"
+	},
+	"pnpm": {
+		"patchedDependencies": {
+			"minecraft-protocol": "patches/minecraft-protocol.patch"
+		}
+	}
+}
