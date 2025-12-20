@@ -33,7 +33,8 @@ if (!fs.existsSync(CONFIG_PATH)) {
       "showSelfInLobby": false,
       "enabled": true,
       "showSuffix": true,
-      "useTeamColorUsernames": true
+      "useTeamColorUsernames": true,
+      "enableIdentity": true
     },
     "bedwarsUtil": {
       "enableTeamSummary": true,
@@ -192,6 +193,7 @@ function applyDefaults(obj: any) {
     enabled: true,
     showSuffix: true,
     useTeamColorUsernames: true,
+    enableIdentity: true,
   }
   obj.tabStatsSettings = Object.assign({}, defaultTabStats, obj.tabStatsSettings || {})
 

@@ -293,23 +293,31 @@ export function encodeRequestAstralUser(uuid: string): Uint8Array {
     return frame;
 }
 
-export function decodeAstralUserResponse(payload: Uint8Array): { uuid: string, isOnAstral?: boolean, prefix?: string } | null {
+export function decodeAstralUserResponse(payload: Uint8Array): { uuid: string, isOnAstral?: boolean, prefix?: string, identity?: string } | null {
     if (payload.length < 17) return null;
 
     const uuidHex = Buffer.from(payload.subarray(0, 16)).toString('hex');
 
-    if (payload.length === 17) {
+        if (payload.length === 17) {
         const isOnAstral = payload[16] === 1;
         return { uuid: uuidHex, isOnAstral };
     }
 
-    const len = payload[16];
-    const start = 17;
-    if (start + len > payload.length) {
+        const len = payload[16];
+        let off = 17;
+        if (off + len > payload.length) {
         return { uuid: uuidHex, isOnAstral: false };
     }
-    const prefix = new TextDecoder().decode(payload.subarray(start, start + len));
-    return { uuid: uuidHex, prefix };
+        const prefix = new TextDecoder().decode(payload.subarray(off, off + len));
+        off += len;
+        let identity: string | undefined;
+        if (off < payload.length) {
+            const idLen = payload[off++];
+            if (off + idLen <= payload.length && idLen > 0) {
+                identity = new TextDecoder().decode(payload.subarray(off, off + idLen));
+            }
+        }
+        return identity ? { uuid: uuidHex, prefix, identity } : { uuid: uuidHex, prefix };
 }
 
 export function buildUserListRequestFrame(): Uint8Array {
