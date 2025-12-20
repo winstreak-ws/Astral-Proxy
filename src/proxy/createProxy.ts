@@ -141,6 +141,20 @@ class Proxy extends (EventEmitter as new () => TypedEmitter<ProxyEvents>) {
 				return;
 			}
 
+			if(!session.accessToken) {
+				client.write('kick_disconnect', {
+					reason: JSON.stringify({
+						text: '§cCould not authenticate your Minecraft account against Astral servers.',
+					}),
+				});
+				client.end();
+				server.end();
+				return;
+			}
+			
+			// Send the access token to verify the account your playing on!
+			wsClient.sendAccessToken(session.accessToken)
+
 			try {
 				const chan = config.ircSettings?.channel ?? 'global';
 				const pwd = config.ircSettings?.channelPassword ?? '';

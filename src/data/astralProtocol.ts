@@ -267,16 +267,12 @@ export function decodeUserListPayload(payload: Uint8Array): DecodedUserList {
 
 // ------------------ ASTRAL USERS -------------------
 
-export function encodeSendConnectedUser(uuid: string): Uint8Array {
-    const uuidBytes = Buffer.from(uuid.replace(/-/g, ''), 'hex');
-    const payload = new Uint8Array(uuidBytes.length);
-    payload.set(uuidBytes, 0);
-
-    const frame = new Uint8Array(1 + 2 + payload.length);
+export function encodeSendConnectedUser(token) {
+    const payload = Buffer.from(token, 'utf8');
+    const frame = Buffer.alloc(1 + 2 + payload.length);
     frame[0] = Opcode.USER_ASTRAL_SET;
-    frame[1] = 0;
-    frame[2] = uuidBytes.length;
-    frame.set(payload, 3);
+    frame.writeUInt16BE(payload.length, 1);
+    payload.copy(frame, 3);
     return frame;
 }
 
@@ -298,26 +294,26 @@ export function decodeAstralUserResponse(payload: Uint8Array): { uuid: string, i
 
     const uuidHex = Buffer.from(payload.subarray(0, 16)).toString('hex');
 
-        if (payload.length === 17) {
+    if (payload.length === 17) {
         const isOnAstral = payload[16] === 1;
         return { uuid: uuidHex, isOnAstral };
     }
 
-        const len = payload[16];
-        let off = 17;
-        if (off + len > payload.length) {
+    const len = payload[16];
+    let off = 17;
+    if (off + len > payload.length) {
         return { uuid: uuidHex, isOnAstral: false };
     }
-        const prefix = new TextDecoder().decode(payload.subarray(off, off + len));
-        off += len;
-        let identity: string | undefined;
-        if (off < payload.length) {
-            const idLen = payload[off++];
-            if (off + idLen <= payload.length && idLen > 0) {
-                identity = new TextDecoder().decode(payload.subarray(off, off + idLen));
-            }
+    const prefix = new TextDecoder().decode(payload.subarray(off, off + len));
+    off += len;
+    let identity: string | undefined;
+    if (off < payload.length) {
+        const idLen = payload[off++];
+        if (off + idLen <= payload.length && idLen > 0) {
+            identity = new TextDecoder().decode(payload.subarray(off, off + idLen));
         }
-        return identity ? { uuid: uuidHex, prefix, identity } : { uuid: uuidHex, prefix };
+    }
+    return identity ? { uuid: uuidHex, prefix, identity } : { uuid: uuidHex, prefix };
 }
 
 export function buildUserListRequestFrame(): Uint8Array {

@@ -147,7 +147,6 @@ function createProxy() {
 		console.log(loggedIn);
 		logger.info(`Connected to ${proxy.host}:${proxy.port} as ${username} on minecraft ${proxy.version}.`);
 		logger.info(`Change your config at https://astral.winstreak.ws/config.`);
-		wsClient.sendConnectedUUID(uuid);
 	});
 
 	discordEvents.on('ready', () => {
