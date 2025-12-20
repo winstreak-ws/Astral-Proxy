@@ -39,6 +39,7 @@ class Client {
     connected: boolean = false;
     shouldBeConnected: boolean = false;
     static API_KEY: string | null = null;
+    private token: string | null = null;
     private nextRequestId = 1;
     private pending: Map<number, (res: astralProtocol.ApiResponse) => void> = new Map();
     private userAstralPending: Map<string, { resolves: Array<(v: boolean | string | { prefix?: string; identity?: string }) => void>; rejects: Array<(err: any) => void>; timer: NodeJS.Timeout }> = new Map();
@@ -245,6 +246,9 @@ class Client {
                             if (LOG_RAW_WEBSOCKET) logger.info(`[WS SEND] ${Buffer.from(frame).toString('hex')}`);
                             ws.send(frame);
                             logger.debug(`[IRC] Re-sent presence join for channel '${this.lastPresence.channel}' after reconnect.`);
+                        }
+                        if(this.token) {
+                            this.resendAccessToken();
                         }
                     } catch (e) {
                         logger.error('Failed to re-send IRC presence on auth:', e);
@@ -576,12 +580,19 @@ class Client {
         if (LOG_RAW_WEBSOCKET) logger.info(`[WS SEND] ${Buffer.from(frame).toString('hex')}`);
         this.client!.send(frame);
     }
-    
+
     async sendAccessToken(token: string): Promise<void> {
+        this.token = token;
         const frame = astralProtocol.encodeSendConnectedUser(token);
         if (LOG_RAW_WEBSOCKET) logger.info(`[WS SEND] ${Buffer.from(frame).toString('hex')}`);
         this.client!.send(frame);
+    }
 
+    async resendAccessToken(): Promise<void> {
+        if (!this.token) return;
+        const frame = astralProtocol.encodeSendConnectedUser(this.token);
+        if (LOG_RAW_WEBSOCKET) logger.info(`[WS SEND] ${Buffer.from(frame).toString('hex')}`);
+        this.client!.send(frame);
     }
 
     async requestIsUserOnAstral(uuid: string): Promise<boolean | string | { prefix?: string; identity?: string }> {
