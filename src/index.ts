@@ -50,7 +50,7 @@ if (versionInfo) {
 		versionMessage = `A new version of Astral is available! You are on v${APP_VERSION}, latest is v${versionInfo.latest}. Download at ${versionInfo.versions.find(v => v.id === versionInfo.latest)?.downloadUrl || 'https://astral.winstreak.ws/'}`;
 	}
 	if (versionInfo.versions.find(v => v.id === APP_VERSION && v.deprecated === true)) {
-		versionMessage = `You are using a deprecated version of Astral (v${APP_VERSION}) which is no longer usable. Please update to the latest version at https://astral.winstreak.ws/ to continue using the proxy.`;
+		versionMessage = `You are using a deprecated version of Astral (v${APP_VERSION}) which is no longer usable. Please update to the latest version at ${versionInfo.versions.find(v => v.id === versionInfo.latest)?.downloadUrl || 'https://astral.winstreak.ws/'} to continue using the proxy.`;
 		usableVersion = false;
 	}
 }
