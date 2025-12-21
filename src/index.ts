@@ -10,7 +10,7 @@ import { getConfig, setConfig, APP_VERSION } from './config/config.js';
 import rateLimiter from './data/rateLimiter.js';
 import { requestAuthFromServer } from './data/configTools.js';
 import axios from 'axios';
-import { ensureAssets } from './config/assets.js';
+import { ensureAssets, getAstralVersionInfo } from './config/assets.js';
 
 let config = getConfig();
 rateLimiter.init();
@@ -40,6 +40,30 @@ let keySet = false;
 const baseUrl = 'https://astral.winstreak.ws';
 
 ensureAssets().catch(() => { });
+const versionInfo = await getAstralVersionInfo().catch(() => null);
+
+let versionMessage = `You are currently on the latest version of Astral. v${APP_VERSION}`;
+let usableVersion = true;
+
+if (versionInfo) {
+	if (versionInfo.latest !== APP_VERSION) {
+		versionMessage = `A new version of Astral is available! You are on v${APP_VERSION}, latest is v${versionInfo.latest}. Download at ${versionInfo.versions.find(v => v.id === versionInfo.latest)?.downloadUrl || 'https://astral.winstreak.ws/'}`;
+	}
+	if (versionInfo.versions.find(v => v.id === APP_VERSION && v.deprecated === true)) {
+		versionMessage = `You are using a deprecated version of Astral (v${APP_VERSION}) which is no longer usable. Please update to the latest version at https://astral.winstreak.ws/ to continue using the proxy.`;
+		usableVersion = false;
+	}
+}
+
+if (!usableVersion) {
+	maybeClear();
+	logger.update(versionMessage);
+	logger.info('Astral will now exit.');
+
+	// freeze the process
+	while(true) {}
+	process.exit(0);
+}
 
 if (config.General.winstreakKey && config.General.winstreakKey !== '') keySet = true;
 
@@ -154,7 +178,7 @@ function createProxy() {
 		console.log(loaded);
 		console.log(chalk.hex('#AAAAFF')('Access your config at https://astral.winstreak.ws/config'));
 		console.log(chalk.hex('#AAAAFF')(`   Connect to localhost:${proxy.listenPort} with Minecraft 1.8.9\n\n`));
-		logger.update('You are currently on the latest version of Astral.', `v${APP_VERSION}`);
+		logger.update(versionMessage);
 		logger.info(`Proxy ready for ${proxy.host}:${proxy.port} for minecraft ${proxy.version}.`);
 		logger.rpc(`Discord RPC successfully connected.`);
 	});

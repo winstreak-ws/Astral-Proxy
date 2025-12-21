@@ -5,6 +5,7 @@ import { getDataDir } from "../utils/paths.js";
 import { logger } from "../utils/logger.js";
 
 const GAMELIST_URL = "https://api.winstreak.ws/assets/astral/gamelist.json";
+const VERSION_URL = "https://api.winstreak.ws/assets/astral/versions.json";
 
 export async function ensureAssets(): Promise<void> {
   try {
@@ -21,4 +22,32 @@ export async function ensureAssets(): Promise<void> {
     logger.warn("[Assets] Failed to update gamelist:", err);
   }
 
+}
+
+type astralVersion = {
+  id: string;
+  published: string;
+  deprecated: boolean;
+  downloadUrl: string | null;
+  changelogUrl: string | null;
+}
+
+type astralVersionInfo = {
+  latest: string;
+  versions: astralVersion[];
+}
+
+export async function getAstralVersionInfo(): Promise<astralVersionInfo | null> {
+  try {
+    const versionRes = await axios.get(VERSION_URL, { timeout: 10000 });
+    if (typeof versionRes.data === "object" && versionRes.data) {
+      return versionRes.data as astralVersionInfo;
+    } else {
+      logger.warn("[Assets] Version response not string");
+      return null;
+    }
+  } catch (err) {
+    logger.warn("[Assets] Failed to get version:", err);
+    return null;
+  }
 }
