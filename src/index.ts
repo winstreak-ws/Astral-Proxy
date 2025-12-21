@@ -40,103 +40,112 @@ let keySet = false;
 const baseUrl = 'https://astral.winstreak.ws';
 
 ensureAssets().catch(() => { });
-const versionInfo = await getAstralVersionInfo().catch(() => null);
-
 let versionMessage = `You are currently on the latest version of Astral. v${APP_VERSION}`;
 let usableVersion = true;
 
-if (versionInfo) {
-	if (versionInfo.latest !== APP_VERSION) {
-		versionMessage = `A new version of Astral is available! You are on v${APP_VERSION}, latest is v${versionInfo.latest}. Download at ${versionInfo.versions.find(v => v.id === versionInfo.latest)?.downloadUrl || 'https://astral.winstreak.ws/'}`;
-	}
-	if (versionInfo.versions.find(v => v.id === APP_VERSION && v.deprecated === true)) {
-		versionMessage = `You are using a deprecated version of Astral (v${APP_VERSION}) which is no longer usable. Please update to the latest version at ${versionInfo.versions.find(v => v.id === versionInfo.latest)?.downloadUrl || 'https://astral.winstreak.ws/'} to continue using the proxy.`;
-		usableVersion = false;
-	}
-}
+async function main() {
+	const versionInfo = await getAstralVersionInfo().catch(() => null);
 
-if (!usableVersion) {
-	maybeClear();
-	logger.update(versionMessage);
-	logger.info('Astral will now exit.');
-
-	// freeze the process
-	while(true) {}
-	process.exit(0);
-}
-
-if (config.General.winstreakKey && config.General.winstreakKey !== '') keySet = true;
-
-if (!keySet) {
-	requestAuthFromServer(baseUrl).catch((e) => {
-		logger.error('Failed to request authentication from server:');
-		return null;
-	}).then(async (res: any) => {
-
-		const authCode = res || null;
-		const PORTOPT = [45151, 45152, 45153, 45154, 45155];
-		let selectedPort = PORTOPT[0];
-
-		const app = express();
-
-		for (const port of PORTOPT) {
-			const isFree = await new Promise((resolve) => {
-				const server = app.listen(port, () => resolve(true));
-				server.on('error', () => resolve(false));
-			});
-			if (isFree) {
-				selectedPort = port;
-				break;
-			}
+	if (versionInfo) {
+		if (versionInfo.latest !== APP_VERSION) {
+			versionMessage = `A new version of Astral is available! You are on v${APP_VERSION}, latest is v${versionInfo.latest}. Download at ${versionInfo.versions.find(v => v.id === versionInfo.latest)?.downloadUrl || 'https://astral.winstreak.ws/'}`;
 		}
+		if (versionInfo.versions.find(v => v.id === APP_VERSION && v.deprecated === true)) {
+			versionMessage = `You are using a deprecated version of Astral (v${APP_VERSION}) which is no longer usable. Please update to the latest version at ${versionInfo.versions.find(v => v.id === versionInfo.latest)?.downloadUrl || 'https://astral.winstreak.ws/'} to continue using the proxy.`;
+			usableVersion = false;
+		}
+	}
 
-		app.get('/callback', async (req, res) => {
-			const token = req.query.token;
-			const code = req.query.code;
+	if (!usableVersion) {
+		maybeClear();
+		logger.update(versionMessage);
+		logger.info('Astral will now exit.');
 
-			if (code !== authCode) {
-				res.status(400).send('Invalid code provided.');
-				return;
+		// freeze the process
+		while(true) {}
+		process.exit(0);
+	}
+
+	if (config.General.winstreakKey && config.General.winstreakKey !== '') keySet = true;
+
+	if (!keySet) {
+		requestAuthFromServer(baseUrl).catch((e) => {
+			logger.error('Failed to request authentication from server:');
+			return null;
+		}).then(async (res: any) => {
+
+			const authCode = res || null;
+			const PORTOPT = [45151, 45152, 45153, 45154, 45155];
+			let selectedPort = PORTOPT[0];
+
+			const app = express();
+
+			for (const port of PORTOPT) {
+				const isFree = await new Promise((resolve) => {
+					const server = app.listen(port, () => resolve(true));
+					server.on('error', () => resolve(false));
+				});
+				if (isFree) {
+					selectedPort = port;
+					break;
+				}
 			}
 
-			const response = await axios.get(`${baseUrl}/api/authenticate?token=${token}&code=${code}`).catch((e) => {
-				logger.error('Failed to fetch API key from server:', e);
-				return null;
+			app.get('/callback', async (req, res) => {
+				const token = req.query.token;
+				const code = req.query.code;
+
+				if (code !== authCode) {
+					res.status(400).send('Invalid code provided.');
+					return;
+				}
+
+				const response = await axios.get(`${baseUrl}/api/authenticate?token=${token}&code=${code}`).catch((e) => {
+					logger.error('Failed to fetch API key from server:', e);
+					return null;
+				});
+
+				if (!response || response.status !== 200 || !response.data.key) {
+					res.status(500).send('Failed to fetch API key from server.');
+					return;
+				}
+
+				const newConfig = getConfig();
+				newConfig.General.winstreakKey = response.data.key;
+				setConfig(newConfig);
+				keySet = true;
+
+				res.status(200).send('Authentication successful! You can now close this tab and return to the proxy.');
+				return;
 			});
 
-			if (!response || response.status !== 200 || !response.data.key) {
-				res.status(500).send('Failed to fetch API key from server.');
-				return;
+			if (authCode) {
+				logger.info('No Winstreak API key set in config. Please click the link below to authenticate:');
+				logger.info(`${baseUrl}/authenticate?code=${authCode}&callback=${encodeURIComponent(`http://localhost:${selectedPort}/callback`)}`);
+			} else {
+				logger.info('No Winstreak API key set in config. Could not request authentication code from server.');
+				logger.info('Please restart the proxy to try again, or manually set your API key in the config file.');
+				logger.info('Check server status at https://status.winstreak.ws/ or contact support if the issue persists.');
 			}
 
-			const newConfig = getConfig();
-			newConfig.General.winstreakKey = response.data.key;
-			setConfig(newConfig);
-			keySet = true;
+			while (!keySet) {
+				await new Promise((resolve) => setTimeout(resolve, 1000));
+				config = getConfig();
+			}
 
-			res.status(200).send('Authentication successful! You can now close this tab and return to the proxy.');
-			return;
+			createProxy();
 		});
-
-		if (authCode) {
-			logger.info('No Winstreak API key set in config. Please click the link below to authenticate:');
-			logger.info(`${baseUrl}/authenticate?code=${authCode}&callback=${encodeURIComponent(`http://localhost:${selectedPort}/callback`)}`);
-		} else {
-			logger.info('No Winstreak API key set in config. Could not request authentication code from server.');
-			logger.info('Please restart the proxy to try again, or manually set your API key in the config file.');
-			logger.info('Check server status at https://status.winstreak.ws/ or contact support if the issue persists.');
-		}
-
-		while (!keySet) {
-			await new Promise((resolve) => setTimeout(resolve, 1000));
-			config = getConfig();
-		}
-
+	} else {
 		createProxy();
-	});
-} else {
-	createProxy();
+	}
 }
+
+// Start the application without top-level await
+main().catch((err) => {
+	try {
+		logger.error('Failed to start Astral:', err?.stack || String(err));
+	} catch { /* no-op */ }
+});
 
 function createProxy() {
 	const proxy = new Proxy(config.General.remoteServerIp, config.General.remoteServerPort, config.General.localServerPort, '1.8.9');
