@@ -1092,6 +1092,15 @@ export default {
 										});
 									}, 10);
 								}
+
+								const team = findPlayerTeam({ originalUsername: proxy.server.username, username: proxy.server.username, displayName: proxy.server.username }, proxy);
+								logger.debug('Found own team for prefix color check:', team);
+
+								//@ts-ignore
+								logger.debug(team?.teamData.prefix.color);
+								//@ts-ignore
+								if (!['gray', undefined].includes(team?.teamData.prefix.color)) ownTeamPrefixColor = team?.teamData.prefix.color;
+
 							}
 						}
 

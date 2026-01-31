@@ -1,6 +1,6 @@
 {
 	"name": "proxy",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "",
 	"main": "./dist/index.js",
 	"type": "module",
@@ -24,8 +24,8 @@
 		"start": "node ./dist/index.js"
 	},
 	"keywords": [],
-	"author": "",
-	"license": "ISC",
+	"author": "Winstreak.ws",
+	"license": "Apache-2.0",
 	"dependencies": {
 		"@winstreak-ws/hypixel-plugin-message": "^0.3.4",
 		"axios": "^1.10.0",
@@ -37,12 +37,10 @@
 		"minecraft-data": "3.84.1",
 		"minecraft-packets": "^1.8.0",
 		"minecraft-protocol": "1.54.0",
-		"pnpm": "^10.14.0",
 		"prismarine-chat": "^1.10.1",
 		"prismarine-entity": "^2.4.0",
 		"prismarine-item": "^1.15.0",
 		"prismarine-registry": "^1.10.0",
-		"tab-stats": "file:",
 		"typed-emitter": "^2.1.0",
 		"uuid": "^13.0.0",
 		"ws": "^8.18.3"
@@ -67,5 +65,6 @@
 		"patchedDependencies": {
 			"minecraft-protocol": "patches/minecraft-protocol.patch"
 		}
-	}
+	},
+	"packageManager": "pnpm@10.28.2"
 }
