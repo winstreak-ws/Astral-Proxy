@@ -21,6 +21,7 @@ setInterval(async () => {
 }, 5000);
 
 let ownUuid = '';
+let ownTeamPrefixColor = '';
 
 type QueuedTask = {
 	priority: number;
@@ -698,22 +699,18 @@ export default {
 		};
 		const onExperience = (): boolean | undefined => {
 			if (proxy.hypixel.server?.status === 'in_game') {
+				lastDeathTime = 0;
+				ownTeamPrefixColor = '';
 				gameType = 'game';
-				if (!announcedThisGame && !teamAnnounceTimeout) {
-					teamAnnounceTimeout = setTimeout(async () => {
-						try {
-							await announceTeamPrefixes();
-						} catch { }
-						announcedThisGame = true;
-						teamAnnounceTimeout = null;
-					}, 4000);
-				}
-				if (!denickerActive && !denickerActivateTimeout) {
-					denickerActivateTimeout = setTimeout(() => {
-						denickerActive = true;
-						denickerActivateTimeout = null;
-					}, 4000);
-				}
+
+				setTimeout(async () => {
+					try {
+						await announceTeamPrefixes();
+					} catch { }
+					announcedThisGame = true;
+				}, 1);
+
+				denickerActive = true;
 			}
 			return undefined;
 		};
@@ -1002,6 +999,9 @@ export default {
 
 		const bordicWinstreakCache = new Map<string, { winstreak: number | null, lastChecked: number }>();
 
+		const teamNames = new Set<string>();
+		let lastDeathTime = 0;
+
 		type BordicWinstreakResponse =
 			| {
 				success: true;
@@ -1030,6 +1030,36 @@ export default {
 						}
 						if (msgObj.extra && Array.isArray(msgObj.extra)) {
 							text += msgObj.extra.map(e => e.text || '').join('');
+						}
+
+						if (msgObj && msgObj.extra && msgObj.extra.length > 0 && gameType === 'game') {
+							const fields = msgObj.extra;
+							if (!fields[fields.length - 1].text.includes('FINAL KILL')) {
+								const playerName = fields[0].text.replace(' ', '');
+								if (playerName !== proxy.server.username && fields[1] && fields[1].color === 'gray') {
+									//@ts-ignore
+									if (ownTeamPrefixColor && fields[0].color === ownTeamPrefixColor) {
+										console.log('Same team death detected for', playerName);
+										lastDeathTime = Date.now();
+									}
+								}
+
+							}
+
+							if (fields.length === 1 && fields[0].text === "You have respawned!" && fields[0].color === 'yellow') {
+								if (Date.now() - lastDeathTime < 5000) {
+									setTimeout(() => {
+										proxy.client.write('title', {
+											action: 0,
+											text: '§cSplit!',
+										});
+										proxy.client.write('title', {
+											action: 2,
+											stay: 50,
+										});
+									}, 10);
+								}
+							}
 						}
 
 						let username = null;
@@ -1079,7 +1109,6 @@ export default {
 							}
 						}
 					} catch (err) {
-
 					}
 				})();
 			}
@@ -1758,6 +1787,9 @@ export default {
 											}
 
 											const team = findPlayerTeam({ originalUsername: username, username: username, displayName: username }, proxy);
+
+											//@ts-ignore
+											if(!['gray', undefined].includes(team?.teamData.prefix.color)) ownTeamPrefixColor = team?.teamData.prefix.color;
 											//@ts-ignore
 											const prefix = team ? jsonToMcText(team.teamData.prefix) : '';
 											teamCache.set(uuid, prefix);
@@ -1796,6 +1828,9 @@ export default {
 								const original = username;
 
 								let playerTeam = findPlayerTeam({ originalUsername: username, username: username, displayName: username }, proxy);
+
+								//@ts-ignore
+								if(!['gray', undefined].includes(playerTeam?.teamData.prefix.color)) ownTeamPrefixColor = playerTeam?.teamData.prefix.color;
 
 								let prefix = '';
 								let suffix = '';
