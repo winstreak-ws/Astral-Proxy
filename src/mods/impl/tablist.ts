@@ -11,6 +11,7 @@ import { getConfig, APP_VERSION } from '../../config/config.js';
 import fs from 'fs';
 import { getConfigPath } from '../../utils/paths.js';
 import wsClient from '../../data/websocketClient.js';
+import { getUUIDVersion } from '../../utils/uuid.js';
 
 
 let config = getConfig()
@@ -44,10 +45,10 @@ async function getNadeshikoStats(uuid: string) {
 		});
 
 		const html = res.data;
-		
+
 		const pattern = /playerData = JSON\.parse\(decodeURIComponent\("(.*?)"\)\)/;
 		const match = html.match(pattern);
-		
+
 		if (!match || !match[1]) {
 			throw new Error('Could not extract player data from Nadeshiko response');
 		}
@@ -702,7 +703,7 @@ export default {
 					teamAnnounceTimeout = setTimeout(async () => {
 						try {
 							await announceTeamPrefixes();
-						} catch {}
+						} catch { }
 						announcedThisGame = true;
 						teamAnnounceTimeout = null;
 					}, 4000);
@@ -726,7 +727,7 @@ export default {
 				if (parsed && typeof parsed === 'object' && (Object.prototype.hasOwnProperty.call(parsed, 'text') || Object.prototype.hasOwnProperty.call(parsed, 'extra'))) {
 					return input;
 				}
-			} catch {}
+			} catch { }
 			return JSON.stringify({ text: input });
 		}
 
@@ -764,7 +765,7 @@ export default {
 							}
 						}
 					}
-				} catch {}
+				} catch { }
 
 				if (teamMap.size === 0) return;
 				const labels = Array.from(teamMap.keys()).sort((a, b) => stripMcCodes(a).localeCompare(stripMcCodes(b)));
@@ -873,7 +874,7 @@ export default {
 						}
 					}
 				}
-			} catch {}
+			} catch { }
 		}
 
 		async function getTagMessages(uuid: string): Promise<{ tagMsg: string, customTagMsg: string }> {
@@ -1155,7 +1156,7 @@ export default {
 											displayName: username
 										});
 										const playerFormat = config?.bedwarsUtil?.teamSummaryPlayerFormat || '%%tags%% %%name%% %%stars%% %%fkdr%% %%wlr%% %%finals%%';
-										
+
 										let tagsDetailed: Array<{ text: string; description: string }> = [];
 										try {
 											const tagRes = await dataGetPlayerTags(realUuid);
@@ -1163,11 +1164,11 @@ export default {
 												filter((t) => t.text && t.text.trim().length > 0);
 										} catch (err) {
 										}
-										
+
 										const extra: any[] = [];
-										
+
 										extra.push({ text: ' §7[' });
-										
+
 										for (let i = 0; i < tagsDetailed.length; i++) {
 											const t = tagsDetailed[i];
 											extra.push({
@@ -1178,9 +1179,9 @@ export default {
 												extra.push({ text: '§7, ' });
 											}
 										}
-										
+
 										extra.push({ text: '§7] ' });
-										
+
 										const statsLine = buildTeamSummaryPlayerLine(playerFormat, {
 											tags: '',
 											ds: ds,
@@ -1190,11 +1191,11 @@ export default {
 											averagePing: null,
 											lastPingFormatted: null
 										});
-										
+
 										if (statsLine && statsLine.trim().length > 0) {
 											extra.push({ text: statsLine });
 										}
-										
+
 										if (extra.length > 0) {
 											try {
 												proxy.client.write('chat', {
@@ -1281,7 +1282,7 @@ export default {
 										if (teamPrefixForPlayer) teamCache.set(playerEntry.uuid, prefix);
 									}
 								}
-							} catch {}
+							} catch { }
 
 							let teamColorCode = ''
 							if (gameType === 'game' && config.tabStatsSettings.useTeamColorUsernames) {
@@ -1324,7 +1325,7 @@ export default {
 								action: 3,
 								data: [{ UUID: playerEntry.uuid, name: playerEntry.username, hasDisplayName: true, displayName: JSON.stringify({ text }) }],
 							})
-						} catch {}
+						} catch { }
 					}
 					tagManager.on('tagsChanged', onTagsChanged)
 					let teamCache: Map<string, string> = new Map();
@@ -1336,11 +1337,9 @@ export default {
 							if (proxy.hypixel.server.map) {
 								if (gameType === 'game') {
 									if (!announcedThisGame && !teamAnnounceTimeout) {
-										teamAnnounceTimeout = setTimeout(async () => {
-											try { await announceTeamPrefixes(); } catch { }
-											announcedThisGame = true;
-											teamAnnounceTimeout = null;
-										}, 4000);
+										try { await announceTeamPrefixes(); } catch { }
+										announcedThisGame = true;
+										teamAnnounceTimeout = null;
 									}
 								} else {
 									announcedThisGame = false;
@@ -1380,7 +1379,7 @@ export default {
 
 								if (newUUIDs.length > 0) {
 									newUUIDs.forEach(uuid => {
-										if (isUUIDv4(uuid)) {
+										if (getUUIDVersion(uuid) === 4) {
 											seenUUIDs.add(uuid);
 										} else {
 										}
@@ -1400,7 +1399,7 @@ export default {
 									if (!player.uuid || !player.username) return;
 									if (player.uuid.replace(/-/g, '') === uuid.replace(/-/g, '')) return;
 
-									if (!isUUIDv4(player.uuid)) {
+									if (getUUIDVersion(player.uuid) === 1) {
 										if (!denickerActive) return;
 										setInterval(async () => {
 											const cachedDisplay = nickDisplayNames.get(player.uuid);
@@ -1511,6 +1510,10 @@ export default {
 										return;
 									}
 
+									if (getUUIDVersion(player.uuid) !== 4) {
+										return;
+									}
+
 									if (player.uuid == uuid) { return }
 									let averagePing: number | null = null;
 									let lastPingFormatted: string | null = null;
@@ -1561,7 +1564,7 @@ export default {
 									};
 
 									if (gameType !== 'lobby') {
-										const dsP = getDisplayStats(player.uuid).then(v => { ds = v; sendUpdate(); }).catch(() => {});
+										const dsP = getDisplayStats(player.uuid).then(v => { ds = v; sendUpdate(); }).catch(() => { });
 										const pingP = (async () => {
 											if (pingCache.has(player.uuid)) {
 												const cached = pingCache.get(player.uuid)!;
@@ -1612,7 +1615,7 @@ export default {
 											sendUpdate();
 										})();
 										sendUpdate();
-										Promise.allSettled([dsP, pingP, tagsP, teamP]).then(() => {});
+										Promise.allSettled([dsP, pingP, tagsP, teamP]).then(() => { });
 									}
 									if (gameType === 'game' && config.tabStatsSettings.useTeamColorUsernames) {
 										const team = findPlayerTeam(player, proxy);
@@ -1736,9 +1739,9 @@ export default {
 					let selfLastPingFormatted: string | null = null;
 					let selfTags: string[] = [];
 					let selfCustomTag: string | null = null;
-					void getDisplayStats(uuid).then(v => { dsSelf = v; }).catch(() => {});
-					void getPingInfo(uuid).then(({ averagePing, lastPingFormatted }) => { selfAvgPing = averagePing; selfLastPingFormatted = lastPingFormatted; }).catch(() => {});
-					void dataGetPlayerTags(uuid).then(res => { selfTags = res?.tags ?? []; selfCustomTag = res?.customtag ?? null; }).catch(() => {});
+					void getDisplayStats(uuid).then(v => { dsSelf = v; }).catch(() => { });
+					void getPingInfo(uuid).then(({ averagePing, lastPingFormatted }) => { selfAvgPing = averagePing; selfLastPingFormatted = lastPingFormatted; }).catch(() => { });
+					void dataGetPlayerTags(uuid).then(res => { selfTags = res?.tags ?? []; selfCustomTag = res?.customtag ?? null; }).catch(() => { });
 
 					ownInterval = setInterval(async () => {
 						let teamPrefixSelf = ''
@@ -1836,7 +1839,7 @@ export default {
 									action: 3,
 									data: [{ UUID: uuid, name: username, hasDisplayName: true, displayName: `{"text":"${await applyAstralPrefix(rawSelf, uuid)}"}` }],
 								});
-							} catch {}
+							} catch { }
 
 							return
 						}
@@ -1915,7 +1918,7 @@ export default {
 				const useIdentity = !!config?.tabStatsSettings?.enableIdentity;
 				if (cached && cached.expires > now && (useIdentity ? cached.identity : cached.prefix)) {
 					const p = useIdentity ? cached.identity! : cached.prefix!;
-					return text.startsWith(p) ? text : `${p}${text}`;
+					return text.startsWith(p) ? text : `${p}§r§7${text}`;
 				}
 				try {
 					void wsClient.requestIsUserOnAstral(uuid_).then(res => {
@@ -1932,10 +1935,10 @@ export default {
 						AstralPrefixCache.set(uuid_, { prefix: prefixToApply, identity: identityToApply, expires: Date.now() + 30 * 60 * 1000 });
 					}).catch(() => { /* ignore */ });
 				} catch { /* ignore */ }
-				return text.startsWith('§d✦ ') || text.startsWith('✦ ') ? text : `§d✦ ${text}`;
+				return text.startsWith('§d✦ ') || text.startsWith('✦ ') ? text : `§d✦ §r§7${text}`;
 			}
 
-			if (!isUUIDv4(uuid)) return text;
+			if (getUUIDVersion(uuid) !== 4) return text;
 
 			{
 
@@ -2043,7 +2046,7 @@ async function getDisplayStats(uuid: string): Promise<DisplayStats | null> {
 					if (!stats || !stats.stats || !stats.stats.Bedwars) {
 						throw new Error('No BedWars stats found from Nadeshiko');
 					}
-					
+
 					const bedwars = stats.stats.Bedwars;
 					const bwLvl = stats.achievements?.bedwars_level || 0;
 					const { rank: rankData, plusColor: rankPlusColor } = resolveRankData(stats);
@@ -2061,7 +2064,7 @@ async function getDisplayStats(uuid: string): Promise<DisplayStats | null> {
 					if (winstreak === undefined || winstreak === null) {
 						winstreak = '?';
 					}
-					
+
 					const result: DisplayStats = {
 						level: bwLvl,
 						wins,
@@ -2181,11 +2184,6 @@ function extractFirstColorCode(text: string): string | null {
 	const colorCodeRegex = /§[0-9a-fk-or]/i;
 	const match = text.match(colorCodeRegex);
 	return match ? match[0] : null;
-}
-
-function isUUIDv4(uuid: string): boolean {
-	const uuidv4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-	return uuidv4Regex.test(uuid);
 }
 
 function getTeamNameFromColorCode(colorCode: string): string | null {
