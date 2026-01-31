@@ -1,4 +1,4 @@
-# Astral Proxy (Winstreak.ws Proxy)
+ # Astral Proxy (Winstreak.ws Proxy)
 ### A cross‑platform Minecraft Java Edition proxy and tooling suite, built with TypeScript/Node.js. Astral Proxy sits between your Minecraft client and Hypixel server to provide quality‑of‑life features like Discord Rich Presence, bedwars utilities, mod hooks and robust caching — while remaining fast and lightweight.
 
 > Not affiliated with Mojang, Microsoft, Hypixel, or any server/operator. Use responsibly and in accordance with all applicable Terms of Service and rules.
@@ -107,7 +107,7 @@ Caches and profiles:
 - After successful login and Microsoft Account authentication, Astral automatically redirects you to `hypixel.net`.
 
 ### Connectivity controls
-- If the WebSocket drops, use `/a:restartws` in chat to re‑establish the connection to our servers.
+- If the WebSocket drops, use `/a:websocket restart` in chat to re‑establish the connection to our servers.
 
 ### IRC usage
 - Join the IRC channel with: `/a:irc join general` (currently only `general` exists).

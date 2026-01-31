@@ -11,6 +11,7 @@ import { getConfig, APP_VERSION } from '../../config/config.js';
 import fs from 'fs';
 import { getConfigPath } from '../../utils/paths.js';
 import wsClient from '../../data/websocketClient.js';
+import { getUUIDVersion } from '../../utils/uuid.js';
 
 
 let config = getConfig()
@@ -20,6 +21,7 @@ setInterval(async () => {
 }, 5000);
 
 let ownUuid = '';
+let ownTeamPrefixColor = '';
 
 type QueuedTask = {
 	priority: number;
@@ -44,10 +46,10 @@ async function getNadeshikoStats(uuid: string) {
 		});
 
 		const html = res.data;
-		
+
 		const pattern = /playerData = JSON\.parse\(decodeURIComponent\("(.*?)"\)\)/;
 		const match = html.match(pattern);
-		
+
 		if (!match || !match[1]) {
 			throw new Error('Could not extract player data from Nadeshiko response');
 		}
@@ -639,7 +641,7 @@ export default {
 	description: 'Shows bedwars stats in the tab list',
 	version: '1.2.0',
 	init: (proxy) => {
-		const username = proxy.server.username;
+		let username = proxy.server.username;
 		const mcUserPath = getConfigPath('minecraft-user.json');
 		try {
 			fs.writeFileSync(mcUserPath, JSON.stringify({ username }), 'utf-8');
@@ -697,22 +699,18 @@ export default {
 		};
 		const onExperience = (): boolean | undefined => {
 			if (proxy.hypixel.server?.status === 'in_game') {
+				lastDeathTime = 0;
+				ownTeamPrefixColor = '';
 				gameType = 'game';
-				if (!announcedThisGame && !teamAnnounceTimeout) {
-					teamAnnounceTimeout = setTimeout(async () => {
-						try {
-							await announceTeamPrefixes();
-						} catch {}
-						announcedThisGame = true;
-						teamAnnounceTimeout = null;
-					}, 4000);
-				}
-				if (!denickerActive && !denickerActivateTimeout) {
-					denickerActivateTimeout = setTimeout(() => {
-						denickerActive = true;
-						denickerActivateTimeout = null;
-					}, 4000);
-				}
+
+				setTimeout(async () => {
+					try {
+						await announceTeamPrefixes();
+					} catch { }
+					announcedThisGame = true;
+				}, 1);
+
+				denickerActive = true;
 			}
 			return undefined;
 		};
@@ -726,11 +724,15 @@ export default {
 				if (parsed && typeof parsed === 'object' && (Object.prototype.hasOwnProperty.call(parsed, 'text') || Object.prototype.hasOwnProperty.call(parsed, 'extra'))) {
 					return input;
 				}
-			} catch {}
+			} catch { }
 			return JSON.stringify({ text: input });
 		}
 
+		let prefixCooldown = 0;
+
 		async function announceTeamPrefixes() {
+			if (Date.now() < prefixCooldown) return;
+			prefixCooldown = Date.now() + 30000;
 			try {
 				if (!config?.bedwarsUtil?.enableTeamSummary) return;
 				if (!proxy.teams || Object.keys(proxy.teams).length === 0) return;
@@ -764,7 +766,7 @@ export default {
 							}
 						}
 					}
-				} catch {}
+				} catch { }
 
 				if (teamMap.size === 0) return;
 				const labels = Array.from(teamMap.keys()).sort((a, b) => stripMcCodes(a).localeCompare(stripMcCodes(b)));
@@ -873,7 +875,7 @@ export default {
 						}
 					}
 				}
-			} catch {}
+			} catch { }
 		}
 
 		async function getTagMessages(uuid: string): Promise<{ tagMsg: string, customTagMsg: string }> {
@@ -970,6 +972,35 @@ export default {
 		const playerPropertiesCache = new Map<string, { name: string; value: string }[]>();
 
 		proxy.onIncoming('player_info', (_meta, _buffer, packet) => {
+			// Find own nick.
+			try {
+				const ownId = String(ownUuid || '').replace(/-/g, '').toLowerCase();
+				const concernsSelf =
+					ownId.length > 0 &&
+					Array.isArray(packet?.data) &&
+					packet.data.some(p => String(p?.UUID || '').replace(/-/g, '').toLowerCase() === ownId);
+
+				if (concernsSelf && packet?.action === 0) {
+					try {
+						const selfEntry = packet.data.find(p => String(p?.UUID || '').replace(/-/g, '').toLowerCase() === ownId);
+						if (selfEntry && typeof selfEntry.name === 'string') {
+							logger.info(`Self name: ${selfEntry.name}`);
+							proxy.server.username = selfEntry.name;
+							username = selfEntry.name;
+
+							const team = findPlayerTeam({ originalUsername: username, username: username, displayName: username }, proxy);
+							logger.debug('Found own team for prefix color check:', team);
+
+
+							//@ts-ignore
+							logger.debug(team?.teamData.prefix.color);
+							//@ts-ignore
+							if (!['gray', undefined].includes(team?.teamData.prefix.color)) ownTeamPrefixColor = team?.teamData.prefix.color;
+						}
+					} catch { /* ignore */ }
+				}
+			} catch { /* ignore */ }
+
 			switch (packet.action) {
 				case 0:
 					for (const player of packet.data) {
@@ -1001,6 +1032,9 @@ export default {
 
 		const bordicWinstreakCache = new Map<string, { winstreak: number | null, lastChecked: number }>();
 
+		const teamNames = new Set<string>();
+		let lastDeathTime = 0;
+
 		type BordicWinstreakResponse =
 			| {
 				success: true;
@@ -1029,6 +1063,45 @@ export default {
 						}
 						if (msgObj.extra && Array.isArray(msgObj.extra)) {
 							text += msgObj.extra.map(e => e.text || '').join('');
+						}
+
+						if (msgObj && msgObj.extra && msgObj.extra.length > 0 && gameType === 'game') {
+							const fields = msgObj.extra;
+							if (!fields[fields.length - 1].text.includes('FINAL KILL')) {
+								const playerName = fields[0].text.replace(' ', '');
+								if (playerName !== proxy.server.username && fields[1] && fields[1].color === 'gray' && !fields[1].text.includes('disconnected')) {
+									//@ts-ignore
+									if (ownTeamPrefixColor && fields[0].color === ownTeamPrefixColor) {
+										logger.debug('Same team death detected for', playerName);
+										lastDeathTime = Date.now();
+									}
+								}
+
+							}
+
+							if (fields.length === 1 && fields[0].text === "You have respawned!" && fields[0].color === 'yellow') {
+								if (Date.now() - lastDeathTime < 5000) {
+									setTimeout(() => {
+										proxy.client.write('title', {
+											action: 0,
+											text: '§cSplit!',
+										});
+										proxy.client.write('title', {
+											action: 2,
+											stay: 50,
+										});
+									}, 10);
+								}
+
+								const team = findPlayerTeam({ originalUsername: proxy.server.username, username: proxy.server.username, displayName: proxy.server.username }, proxy);
+								logger.debug('Found own team for prefix color check:', team);
+
+								//@ts-ignore
+								logger.debug(team?.teamData.prefix.color);
+								//@ts-ignore
+								if (!['gray', undefined].includes(team?.teamData.prefix.color)) ownTeamPrefixColor = team?.teamData.prefix.color;
+
+							}
 						}
 
 						let username = null;
@@ -1078,7 +1151,6 @@ export default {
 							}
 						}
 					} catch (err) {
-
 					}
 				})();
 			}
@@ -1155,7 +1227,7 @@ export default {
 											displayName: username
 										});
 										const playerFormat = config?.bedwarsUtil?.teamSummaryPlayerFormat || '%%tags%% %%name%% %%stars%% %%fkdr%% %%wlr%% %%finals%%';
-										
+
 										let tagsDetailed: Array<{ text: string; description: string }> = [];
 										try {
 											const tagRes = await dataGetPlayerTags(realUuid);
@@ -1163,11 +1235,11 @@ export default {
 												filter((t) => t.text && t.text.trim().length > 0);
 										} catch (err) {
 										}
-										
+
 										const extra: any[] = [];
-										
+
 										extra.push({ text: ' §7[' });
-										
+
 										for (let i = 0; i < tagsDetailed.length; i++) {
 											const t = tagsDetailed[i];
 											extra.push({
@@ -1178,9 +1250,9 @@ export default {
 												extra.push({ text: '§7, ' });
 											}
 										}
-										
+
 										extra.push({ text: '§7] ' });
-										
+
 										const statsLine = buildTeamSummaryPlayerLine(playerFormat, {
 											tags: '',
 											ds: ds,
@@ -1190,11 +1262,11 @@ export default {
 											averagePing: null,
 											lastPingFormatted: null
 										});
-										
+
 										if (statsLine && statsLine.trim().length > 0) {
 											extra.push({ text: statsLine });
 										}
-										
+
 										if (extra.length > 0) {
 											try {
 												proxy.client.write('chat', {
@@ -1281,7 +1353,7 @@ export default {
 										if (teamPrefixForPlayer) teamCache.set(playerEntry.uuid, prefix);
 									}
 								}
-							} catch {}
+							} catch { }
 
 							let teamColorCode = ''
 							if (gameType === 'game' && config.tabStatsSettings.useTeamColorUsernames) {
@@ -1324,7 +1396,7 @@ export default {
 								action: 3,
 								data: [{ UUID: playerEntry.uuid, name: playerEntry.username, hasDisplayName: true, displayName: JSON.stringify({ text }) }],
 							})
-						} catch {}
+						} catch { }
 					}
 					tagManager.on('tagsChanged', onTagsChanged)
 					let teamCache: Map<string, string> = new Map();
@@ -1335,12 +1407,10 @@ export default {
 						try {
 							if (proxy.hypixel.server.map) {
 								if (gameType === 'game') {
-									if (!announcedThisGame && !teamAnnounceTimeout) {
-										teamAnnounceTimeout = setTimeout(async () => {
-											try { await announceTeamPrefixes(); } catch { }
-											announcedThisGame = true;
-											teamAnnounceTimeout = null;
-										}, 4000);
+									if (!announcedThisGame) {
+										try { await announceTeamPrefixes(); } catch { }
+										announcedThisGame = true;
+										teamAnnounceTimeout = null;
 									}
 								} else {
 									announcedThisGame = false;
@@ -1380,7 +1450,7 @@ export default {
 
 								if (newUUIDs.length > 0) {
 									newUUIDs.forEach(uuid => {
-										if (isUUIDv4(uuid)) {
+										if (getUUIDVersion(uuid) === 4) {
 											seenUUIDs.add(uuid);
 										} else {
 										}
@@ -1400,7 +1470,7 @@ export default {
 									if (!player.uuid || !player.username) return;
 									if (player.uuid.replace(/-/g, '') === uuid.replace(/-/g, '')) return;
 
-									if (!isUUIDv4(player.uuid)) {
+									if (getUUIDVersion(player.uuid) === 1) {
 										if (!denickerActive) return;
 										setInterval(async () => {
 											const cachedDisplay = nickDisplayNames.get(player.uuid);
@@ -1511,6 +1581,10 @@ export default {
 										return;
 									}
 
+									if (getUUIDVersion(player.uuid) !== 4) {
+										return;
+									}
+
 									if (player.uuid == uuid) { return }
 									let averagePing: number | null = null;
 									let lastPingFormatted: string | null = null;
@@ -1561,7 +1635,7 @@ export default {
 									};
 
 									if (gameType !== 'lobby') {
-										const dsP = getDisplayStats(player.uuid).then(v => { ds = v; sendUpdate(); }).catch(() => {});
+										const dsP = getDisplayStats(player.uuid).then(v => { ds = v; sendUpdate(); }).catch(() => { });
 										const pingP = (async () => {
 											if (pingCache.has(player.uuid)) {
 												const cached = pingCache.get(player.uuid)!;
@@ -1612,7 +1686,7 @@ export default {
 											sendUpdate();
 										})();
 										sendUpdate();
-										Promise.allSettled([dsP, pingP, tagsP, teamP]).then(() => {});
+										Promise.allSettled([dsP, pingP, tagsP, teamP]).then(() => { });
 									}
 									if (gameType === 'game' && config.tabStatsSettings.useTeamColorUsernames) {
 										const team = findPlayerTeam(player, proxy);
@@ -1736,9 +1810,9 @@ export default {
 					let selfLastPingFormatted: string | null = null;
 					let selfTags: string[] = [];
 					let selfCustomTag: string | null = null;
-					void getDisplayStats(uuid).then(v => { dsSelf = v; }).catch(() => {});
-					void getPingInfo(uuid).then(({ averagePing, lastPingFormatted }) => { selfAvgPing = averagePing; selfLastPingFormatted = lastPingFormatted; }).catch(() => {});
-					void dataGetPlayerTags(uuid).then(res => { selfTags = res?.tags ?? []; selfCustomTag = res?.customtag ?? null; }).catch(() => {});
+					void getDisplayStats(uuid).then(v => { dsSelf = v; }).catch(() => { });
+					void getPingInfo(uuid).then(({ averagePing, lastPingFormatted }) => { selfAvgPing = averagePing; selfLastPingFormatted = lastPingFormatted; }).catch(() => { });
+					void dataGetPlayerTags(uuid).then(res => { selfTags = res?.tags ?? []; selfCustomTag = res?.customtag ?? null; }).catch(() => { });
 
 					ownInterval = setInterval(async () => {
 						let teamPrefixSelf = ''
@@ -1755,6 +1829,11 @@ export default {
 											}
 
 											const team = findPlayerTeam({ originalUsername: username, username: username, displayName: username }, proxy);
+
+											//@ts-ignore
+											logger.debug(team?.teamData.prefix.color);
+											//@ts-ignore
+											if (!['gray', undefined].includes(team?.teamData.prefix.color)) ownTeamPrefixColor = team?.teamData.prefix.color;
 											//@ts-ignore
 											const prefix = team ? jsonToMcText(team.teamData.prefix) : '';
 											teamCache.set(uuid, prefix);
@@ -1793,6 +1872,9 @@ export default {
 								const original = username;
 
 								let playerTeam = findPlayerTeam({ originalUsername: username, username: username, displayName: username }, proxy);
+
+								//@ts-ignore
+								if (!['gray', undefined].includes(playerTeam?.teamData.prefix.color)) ownTeamPrefixColor = playerTeam?.teamData.prefix.color;
 
 								let prefix = '';
 								let suffix = '';
@@ -1836,7 +1918,7 @@ export default {
 									action: 3,
 									data: [{ UUID: uuid, name: username, hasDisplayName: true, displayName: `{"text":"${await applyAstralPrefix(rawSelf, uuid)}"}` }],
 								});
-							} catch {}
+							} catch { }
 
 							return
 						}
@@ -1915,7 +1997,7 @@ export default {
 				const useIdentity = !!config?.tabStatsSettings?.enableIdentity;
 				if (cached && cached.expires > now && (useIdentity ? cached.identity : cached.prefix)) {
 					const p = useIdentity ? cached.identity! : cached.prefix!;
-					return text.startsWith(p) ? text : `${p}${text}`;
+					return text.startsWith(p) ? text : `${p}§r§7${text}`;
 				}
 				try {
 					void wsClient.requestIsUserOnAstral(uuid_).then(res => {
@@ -1932,10 +2014,10 @@ export default {
 						AstralPrefixCache.set(uuid_, { prefix: prefixToApply, identity: identityToApply, expires: Date.now() + 30 * 60 * 1000 });
 					}).catch(() => { /* ignore */ });
 				} catch { /* ignore */ }
-				return text.startsWith('§d✦ ') || text.startsWith('✦ ') ? text : `§d✦ ${text}`;
+				return text.startsWith('§d✦ ') || text.startsWith('✦ ') ? text : `§d✦ §r§7${text}`;
 			}
 
-			if (!isUUIDv4(uuid)) return text;
+			if (getUUIDVersion(uuid) !== 4) return text;
 
 			{
 
@@ -2043,7 +2125,7 @@ async function getDisplayStats(uuid: string): Promise<DisplayStats | null> {
 					if (!stats || !stats.stats || !stats.stats.Bedwars) {
 						throw new Error('No BedWars stats found from Nadeshiko');
 					}
-					
+
 					const bedwars = stats.stats.Bedwars;
 					const bwLvl = stats.achievements?.bedwars_level || 0;
 					const { rank: rankData, plusColor: rankPlusColor } = resolveRankData(stats);
@@ -2061,7 +2143,7 @@ async function getDisplayStats(uuid: string): Promise<DisplayStats | null> {
 					if (winstreak === undefined || winstreak === null) {
 						winstreak = '?';
 					}
-					
+
 					const result: DisplayStats = {
 						level: bwLvl,
 						wins,
@@ -2181,11 +2263,6 @@ function extractFirstColorCode(text: string): string | null {
 	const colorCodeRegex = /§[0-9a-fk-or]/i;
 	const match = text.match(colorCodeRegex);
 	return match ? match[0] : null;
-}
-
-function isUUIDv4(uuid: string): boolean {
-	const uuidv4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-	return uuidv4Regex.test(uuid);
 }
 
 function getTeamNameFromColorCode(colorCode: string): string | null {
