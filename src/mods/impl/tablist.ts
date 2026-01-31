@@ -641,7 +641,7 @@ export default {
 	description: 'Shows bedwars stats in the tab list',
 	version: '1.2.0',
 	init: (proxy) => {
-		const username = proxy.server.username;
+		let username = proxy.server.username;
 		const mcUserPath = getConfigPath('minecraft-user.json');
 		try {
 			fs.writeFileSync(mcUserPath, JSON.stringify({ username }), 'utf-8');
@@ -972,6 +972,35 @@ export default {
 		const playerPropertiesCache = new Map<string, { name: string; value: string }[]>();
 
 		proxy.onIncoming('player_info', (_meta, _buffer, packet) => {
+			// Find own nick.
+			try {
+				const ownId = String(ownUuid || '').replace(/-/g, '').toLowerCase();
+				const concernsSelf =
+					ownId.length > 0 &&
+					Array.isArray(packet?.data) &&
+					packet.data.some(p => String(p?.UUID || '').replace(/-/g, '').toLowerCase() === ownId);
+
+				if (concernsSelf && packet?.action === 0) {
+					try {
+						const selfEntry = packet.data.find(p => String(p?.UUID || '').replace(/-/g, '').toLowerCase() === ownId);
+						if (selfEntry && typeof selfEntry.name === 'string') {
+							logger.info(`Self name: ${selfEntry.name}`);
+							proxy.server.username = selfEntry.name;
+							username = selfEntry.name;
+
+							const team = findPlayerTeam({ originalUsername: username, username: username, displayName: username }, proxy);
+							logger.debug('Found own team for prefix color check:', team);
+
+
+							//@ts-ignore
+							logger.debug(team?.teamData.prefix.color);
+							//@ts-ignore
+							if (!['gray', undefined].includes(team?.teamData.prefix.color)) ownTeamPrefixColor = team?.teamData.prefix.color;
+						}
+					} catch { /* ignore */ }
+				}
+			} catch { /* ignore */ }
+
 			switch (packet.action) {
 				case 0:
 					for (const player of packet.data) {
@@ -1793,7 +1822,9 @@ export default {
 											const team = findPlayerTeam({ originalUsername: username, username: username, displayName: username }, proxy);
 
 											//@ts-ignore
-											if(!['gray', undefined].includes(team?.teamData.prefix.color)) ownTeamPrefixColor = team?.teamData.prefix.color;
+											logger.debug(team?.teamData.prefix.color);
+											//@ts-ignore
+											if (!['gray', undefined].includes(team?.teamData.prefix.color)) ownTeamPrefixColor = team?.teamData.prefix.color;
 											//@ts-ignore
 											const prefix = team ? jsonToMcText(team.teamData.prefix) : '';
 											teamCache.set(uuid, prefix);
@@ -1834,7 +1865,7 @@ export default {
 								let playerTeam = findPlayerTeam({ originalUsername: username, username: username, displayName: username }, proxy);
 
 								//@ts-ignore
-								if(!['gray', undefined].includes(playerTeam?.teamData.prefix.color)) ownTeamPrefixColor = playerTeam?.teamData.prefix.color;
+								if (!['gray', undefined].includes(playerTeam?.teamData.prefix.color)) ownTeamPrefixColor = playerTeam?.teamData.prefix.color;
 
 								let prefix = '';
 								let suffix = '';
