@@ -728,7 +728,11 @@ export default {
 			return JSON.stringify({ text: input });
 		}
 
+		let prefixCooldown = 0;
+
 		async function announceTeamPrefixes() {
+			if (Date.now() < prefixCooldown) return;
+			prefixCooldown = Date.now() + 30000;
 			try {
 				if (!config?.bedwarsUtil?.enableTeamSummary) return;
 				if (!proxy.teams || Object.keys(proxy.teams).length === 0) return;
@@ -1036,10 +1040,10 @@ export default {
 							const fields = msgObj.extra;
 							if (!fields[fields.length - 1].text.includes('FINAL KILL')) {
 								const playerName = fields[0].text.replace(' ', '');
-								if (playerName !== proxy.server.username && fields[1] && fields[1].color === 'gray') {
+								if (playerName !== proxy.server.username && fields[1] && fields[1].color === 'gray' && !fields[1].text.includes('disconnected')) {
 									//@ts-ignore
 									if (ownTeamPrefixColor && fields[0].color === ownTeamPrefixColor) {
-										console.log('Same team death detected for', playerName);
+										logger.debug('Same team death detected for', playerName);
 										lastDeathTime = Date.now();
 									}
 								}
@@ -1365,7 +1369,7 @@ export default {
 						try {
 							if (proxy.hypixel.server.map) {
 								if (gameType === 'game') {
-									if (!announcedThisGame && !teamAnnounceTimeout) {
+									if (!announcedThisGame) {
 										try { await announceTeamPrefixes(); } catch { }
 										announcedThisGame = true;
 										teamAnnounceTimeout = null;
