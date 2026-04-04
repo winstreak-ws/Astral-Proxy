@@ -25,6 +25,12 @@ elif command -v konsole >/dev/null; then
   exec konsole -e $APP_NAME "\$@"
 elif command -v xterm >/dev/null; then
   exec xterm -e $APP_NAME "\$@"
+elif command -v kitty >/dev/null; then
+  exec kitty -- astral "$@"
+elif command -v alacritty >/dev/null; then
+  exec alacritty -e astral "$@"
+elif command -v foot >/dev/null; then
+  exec foot astral "$@"
 else
   echo "Could not find a supported terminal emulator!"
   exit 1
